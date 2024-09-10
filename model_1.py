@@ -1,30 +1,23 @@
+import easyocr
 from constants import _DEFAULT_Y_OFFSET, _DEFAULT_BG_OPACITY, _DEFAULT_TEXT_COLOR_RGB, _DEFAULT_BG_COLOR_RGB
-import pytesseract
-from PIL import Image
 import time
+reader = easyocr.Reader(['en'])  # Initialize the EasyOCR reader with the language you need
 
 
 class Model1:
     _MAX_OVERLAP_THRESHOLD = 90  # in percentage
 
     def get_text_bounding_boxes(self, frame):
-        """Returns a list of bounding boxes for detected text using Tesseract."""
-        # Convert frame (image) to PIL Image if necessary
-        if not isinstance(frame, Image.Image):
-            frame = Image.fromarray(frame)
-
-        # Get bounding boxes from Tesseract
-        results = pytesseract.image_to_boxes(frame)  # Returns string with bounding box information
+        """Returns a list of bounding boxes for detected text using EasyOCR."""
+        results = reader.readtext(frame)  # Returns a list of results with bounding boxes and text
         text_boxes = []
-        for result in results.splitlines():
-            data = result.split()
-            text = data[0]  # The recognized text
-            x = int(data[1])
-            y = int(data[2])
-            w = int(data[3]) - x  # Width of the text box
-            h = int(data[4]) - y  # Height of the text box
+        for (bbox, text, prob) in results:
+            (top_left, top_right, bottom_right, bottom_left) = bbox
+            x = int(top_left[0])
+            y = int(top_left[1])
+            w = int(bottom_right[0] - top_left[0])
+            h = int(bottom_right[1] - top_left[1])
             text_boxes.append((x, y, w, h))  # Append the bounding box (x, y, width, height)
-
         return text_boxes
 
     def get_subtitles_data(self, frame, subtitle_text_box):
@@ -47,10 +40,10 @@ class Model1:
         y_offset = _DEFAULT_Y_OFFSET  # Initial offset, to be adjusted if overlap occurs
         for frame_text_box in frame_text_boxes:
             if self._is_overlap_greater_than_threshold(subtitle_text_box, frame_text_box):
-                y_offset = self._adjust_subtitle_position(frame_text_box)
+                y_offset = self._adjust_subtitle_position(subtitle_text_box, frame_text_box)
                 break  # Apply once for the first overlapping box
 
-        return bg_opacity, text_color_rgb, bg_color_rgb, y_offset
+        return (bg_opacity, text_color_rgb, bg_color_rgb, y_offset)
 
     # Private method to check if the overlap between two rectangles is greater than 90%
     def _is_overlap_greater_than_threshold(self, subtitle_box, frame_box):
@@ -72,7 +65,7 @@ class Model1:
         return overlap_percentage > self._MAX_OVERLAP_THRESHOLD
 
     # Private method to adjust the subtitle box position if overlap is found
-    def _adjust_subtitle_position(self, frame_box):
+    def _adjust_subtitle_position(self, subtitle_box, frame_box):
         # Move the subtitle box by 10 pixels above the frame text box
         _, y2, _, h2 = frame_box  # Extract the y position and height of the frame text box
         y_offset = y2 - h2 - 10  # Adjust the subtitle y position to be 10 pixels above the frame text box
