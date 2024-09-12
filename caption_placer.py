@@ -1,9 +1,13 @@
+from datetime import datetime
+
 import cv2
 from constants import _DEFAULT_Y_OFFSET, _DEFAULT_BG_OPACITY, _DEFAULT_TEXT_COLOR_RGB, _DEFAULT_BG_COLOR_RGB, \
     _DEFAULT_H_SPACE, _DEFAULT_V_SPACE
 from pyshine import putBText
 
 from model_1 import Model1
+
+_ANALYSE_PER_N_FRAMES = 10
 
 
 def parse_srt_file(subtitle_path):
@@ -71,14 +75,18 @@ def add_subtitles_realtime(video_path, subtitle_path, text_color=_DEFAULT_TEXT_C
     frame_count = 0
     cur_idx = 0
     subtitle_text = ''  # Initialize subtitle text to be empty
-
+    fr_num = 0
+    # ek caption ki line will have the same offset for all the frames jisme woh hay
+    cap_idx_y_offset = []
+    fr_checking_on_post_subtitle = 0
     while cap.isOpened():
         ret, frame = cap.read()
         if not ret:
             break
-
+        fr_num += 1
         # Calculate current time in video
         cur_time = frame_count / fps
+
 
         # Check if we need to update the subtitle
         if cur_idx < len(subtitles):
@@ -86,7 +94,7 @@ def add_subtitles_realtime(video_path, subtitle_path, text_color=_DEFAULT_TEXT_C
             if cur_time > subtitles[cur_idx]['end_time_seconds']:
                 cur_idx += 1
                 subtitle_text = ''  # Clear the subtitle text after the end time
-
+                fr_checking_on_post_subtitle = 0
             # Check if current time has reached the start time of the next subtitle
             if cur_idx < len(subtitles) and cur_time >= subtitles[cur_idx]['start_time_seconds']:
                 subtitle_text = subtitles[cur_idx]['text']
@@ -97,15 +105,28 @@ def add_subtitles_realtime(video_path, subtitle_path, text_color=_DEFAULT_TEXT_C
         text_y = frame.shape[0] - y_offset
 
         # Create a background rectangle with specified opacity
-        if subtitle_text:
+        if subtitle_text != '':
+            # check for only 10 frames after subtitles come only to adjust y_offset
+            fr_checking_on_post_subtitle += 1
+
             # let's check if another text already present
-            bg_opacity, text_color_rgb, bg_color_rgb, y_offset = Model1().get_subtitles_data(frame,
-                                                                                             _get_subtitle_text_box(
-                                                                                                 subtitle_text,
-                                                                                                 font_scale, thickness,
-                                                                                                 _DEFAULT_H_SPACE,
-                                                                                                 _DEFAULT_V_SPACE,
-                                                                                                 text_x, text_y))
+            # let's check for this every 10 frames only
+            # this if should make things faster
+            if cur_idx < len(cap_idx_y_offset):
+                y_offset = cap_idx_y_offset[cur_idx]
+            else:
+                y_offset = Model1().get_subtitles_data(frame,
+                                                       _get_subtitle_text_box(
+                                                           subtitle_text,
+                                                           font_scale,
+                                                           thickness,
+                                                           _DEFAULT_H_SPACE,
+                                                           _DEFAULT_V_SPACE,
+                                                           text_x, text_y))
+                if fr_checking_on_post_subtitle >= 10:
+                    cap_idx_y_offset.append(y_offset)
+                elif y_offset != _DEFAULT_Y_OFFSET:
+                    cap_idx_y_offset.append(y_offset)
 
             subtitled_frame = putBText(
                 frame,  # The frame on which to draw the text
