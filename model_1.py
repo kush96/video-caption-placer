@@ -8,7 +8,7 @@ reader = easyocr.Reader(['en'])  # Initialize the EasyOCR reader with the langua
 
 class Model1:
 
-    def __init__(self, padding=20, scale_factor=0.5):
+    def __init__(self, padding=0, scale_factor=0.75):
         self.padding = padding  # Padding around the subtitle box
         self.scale_factor = scale_factor  # Downscale factor for the cropped frame
 
@@ -28,7 +28,6 @@ class Model1:
         # Step 3: Optionally downscale the cropped frame for faster OCR processing
         resized_frame = self.resize_frame(cropped_frame)
 
-        cv2.imshow("Resized Frame", resized_frame)
         # Step 4: Run OCR on the smaller, downscaled cropped frame
         text_boxes = self.run_ocr_on_frame(resized_frame)
 
@@ -114,12 +113,17 @@ class Model1:
         _, _, w_padded, h_padded = padded_box
         padded_box_area = w_padded * h_padded
 
+        tot_text_area = 0
         for (x, y, w, h) in text_boxes:
+            w = int(w / self.scale_factor)
+            h = int(h / self.scale_factor)
             text_area = w * h
-            coverage_percentage = (text_area / padded_box_area) * 100
+            tot_text_area += text_area
 
-            if coverage_percentage >= 70:
-                return True
+        coverage_percentage = (tot_text_area / padded_box_area) * 100
+
+        if coverage_percentage >= 30:
+            return True
         return False
 
     def draw_padded_box_on_debug_frame(self, debug_frame, padded_box):
@@ -169,7 +173,7 @@ class Model1:
         y_offset = _DEFAULT_Y_OFFSET  # Initial offset, to be adjusted if overlap occurs
 
         if is_subtitle_obstructed_by_text:
-            y_offset += 15
+            y_offset += 100
 
         return y_offset
 
